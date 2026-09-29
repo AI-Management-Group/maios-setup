@@ -2,7 +2,7 @@
 # MAIOS オリエン用の一括セットアップ（Mac）
 #
 # オリエンの場で、ターミナルに次の1行を貼り付けて実行する（管理者のパスワードは要らない）：
-#   curl -fsSL <配布 URL>/maios_setup_mac.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/AI-Management-Group/maios-setup/main/mac.sh | bash
 #
 # やること（何度実行しても同じ結果になる）：
 #   1. uv（Python を入れる道具）を ~/.local/bin に入れる

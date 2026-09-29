@@ -1,7 +1,7 @@
 # MAIOS オリエン用の一括セットアップ（Windows）
 #
 # オリエンの場で、PowerShell（管理者ではない普通の PowerShell）に次の1行を貼り付けて実行する：
-#   iex ([Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('<配布 URL>/maios_setup_win.ps1')))
+#   iex ([Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://raw.githubusercontent.com/AI-Management-Group/maios-setup/main/win.ps1')))
 #   （文字化けしないよう、UTF-8 として読み込んでから実行する形にしている）
 #
 # やること（何度実行しても同じ結果になる・管理者権限は要らない）：
