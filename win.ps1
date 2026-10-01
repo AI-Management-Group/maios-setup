@@ -7,7 +7,8 @@
 # やること（何度実行しても同じ結果になる・管理者権限は要らない）：
 #   1. Python 3.12 を「この利用者だけ」に入れる（%LOCALAPPDATA%\Programs\Python\Python312。MAIOS のフックはここを PATH に無くても拾う）
 #      ARM 版 Windows でも x64 版を入れる（部品の配布物が x64 にしか無いものがあるため。Windows 11 は x64 をそのまま動かせる）
-#   2. スキルが使う部品8つを入れる（python-pptx openpyxl pandas PyYAML jpholiday Pillow playwright reportlab）
+#   2. スキルが使う Python の部品を入れる（同梱スキルのスクリプトが読み込むもの全部。一覧は下の $Pkgs。
+#      動画・文字認識など、別のソフトも要る部品は入れない＝tools/setup/README.md の「条件付きの部品」）
 #      あわせて、この利用者の環境変数 PYTHONUTF8=1 を設定する（Windows の Python は既定の文字コードが cp932 で、
 #      スキルのスクリプトが日本語を読み書きする時に化けたり落ちたりするため。Python が常に UTF-8 を使うようになる）
 #   3. Node.js（JavaScript のプログラムを動かすソフト）と、その部品2つ（pptxgenjs playwright）を入れる
@@ -28,8 +29,9 @@ $ProgressPreference = 'SilentlyContinue'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 
 $PyVer = '3.12.10'
-$Pkgs = @('python-pptx', 'openpyxl', 'pandas', 'PyYAML', 'jpholiday', 'Pillow', 'playwright', 'reportlab')
-$Imports = 'import pptx, openpyxl, pandas, yaml, jpholiday, PIL, playwright, reportlab'
+# $Pkgs を変えたら $Imports と Mac 版（maios_setup_mac.sh の PKGS・IMPORTS）も同じにする（tests/test_scripts_portable.py が照らす）
+$Pkgs = @('python-pptx', 'openpyxl', 'pandas', 'PyYAML', 'jpholiday', 'Pillow', 'playwright', 'reportlab', 'numpy', 'matplotlib', 'seaborn', 'tabulate', 'beautifulsoup4', 'lxml', 'requests')
+$Imports = 'import pptx, openpyxl, pandas, yaml, jpholiday, PIL, playwright, reportlab, numpy, matplotlib, seaborn, tabulate, bs4, lxml, requests'
 $NodeVer = 'v24.21.0'
 $NodeSha = '158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541'
 $NodePkgs = @('pptxgenjs', 'playwright')
@@ -209,8 +211,8 @@ if ($py) {
   Log "python $py"
 } else { Write-Host '  入れられませんでした' }
 
-# 2. 部品8つ
-Step '2/5 スキルが使う部品（8つ）'
+# 2. スキルが使う Python の部品
+Step '2/5 スキルが使う部品'
 if ($py) {
   $ok = Install-Parts $py
   if (-not $ok) {
@@ -328,7 +330,7 @@ Write-Host '=============================='
 Write-Host ' MAIOS セットアップの結果'
 Write-Host '=============================='
 Write-Host (' {0} Python' -f $R_PY)
-Write-Host (' {0} 部品8つ' -f $R_PKG)
+Write-Host (' {0} スキルが使う部品' -f $R_PKG)
 Write-Host (' {0} Node.js と部品2つ' -f $R_NODE)
 Write-Host (' {0} 画面確認用のブラウザ' -f $R_BROWSER)
 if ($R_APP -ne '－') { Write-Host (' {0} Claude アプリ' -f $R_APP) }

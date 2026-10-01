@@ -7,7 +7,8 @@
 # やること（何度実行しても同じ結果になる）：
 #   1. uv（Python を入れる道具）を ~/.local/bin に入れる
 #   2. Python 3.12 を ~/.local/bin/python3 に入れる（MAIOS のフックはここを PATH に無くても拾う）
-#   3. スキルが使う部品8つを入れる（python-pptx openpyxl pandas PyYAML jpholiday Pillow playwright reportlab）
+#   3. スキルが使う Python の部品を入れる（同梱スキルのスクリプトが読み込むもの全部。一覧は下の PKGS。
+#      動画・文字認識など、別のソフトも要る部品は入れない＝tools/setup/README.md の「条件付きの部品」）
 #   4. Node.js（JavaScript のプログラムを動かすソフト）と、その部品2つ（pptxgenjs playwright）を入れる
 #      リッチなデックを組む経路と、ブラウザで表示を測るスクリプトが使う。Node.js 20 以上が既にあればそれを使い、
 #      無ければ ~/.local/share/maios/node に入れる（公式の配布物を、チェックサムで中身を確かめてから展開する）。
@@ -22,8 +23,9 @@
 # 環境変数（AMG・テスト用）：MAIOS_SETUP_SKIP_APPS=1 でアプリの確認を省く／MAIOS_SETUP_FORCE_NODE=1 で既存の Node.js があっても入れる
 set -u
 
-PKGS="python-pptx openpyxl pandas PyYAML jpholiday Pillow playwright reportlab"
-IMPORTS="import pptx, openpyxl, pandas, yaml, jpholiday, PIL, playwright, reportlab"
+# PKGS を変えたら IMPORTS と Windows 版（maios_setup_win.ps1 の $Pkgs・$Imports）も同じにする（tests/test_scripts_portable.py が照らす）
+PKGS="python-pptx openpyxl pandas PyYAML jpholiday Pillow playwright reportlab numpy matplotlib seaborn tabulate beautifulsoup4 lxml requests"
+IMPORTS="import pptx, openpyxl, pandas, yaml, jpholiday, PIL, playwright, reportlab, numpy, matplotlib, seaborn, tabulate, bs4, lxml, requests"
 NODE_VER="v24.21.0"
 NODE_SHA_ARM64="bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057"
 NODE_SHA_X64="1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097"
@@ -73,8 +75,8 @@ else
   echo "  入れられませんでした"
 fi
 
-# 3. 部品8つ
-step "3/6 スキルが使う部品（8つ）"
+# 3. スキルが使う Python の部品
+step "3/6 スキルが使う部品"
 if [ "$R_PY" = "✅" ]; then
   # shellcheck disable=SC2086
   if [ -n "$UV" ] && [ -x "$UV" ]; then
@@ -196,7 +198,7 @@ printf '\n==============================\n'
 printf ' MAIOS セットアップの結果\n'
 printf '==============================\n'
 printf ' %s Python\n' "$R_PY"
-printf ' %s 部品8つ\n' "$R_PKG"
+printf ' %s スキルが使う部品\n' "$R_PKG"
 printf ' %s Node.js と部品2つ\n' "$R_NODE"
 printf ' %s 画面確認用のブラウザ\n' "$R_BROWSER"
 [ "$R_APP" = "－" ] || printf ' %s Claude アプリ\n' "$R_APP"
