@@ -24,8 +24,8 @@
 set -u
 
 # PKGS を変えたら IMPORTS と Windows 版（maios_setup_win.ps1 の $Pkgs・$Imports）も同じにする（tests/test_scripts_portable.py が照らす）
-PKGS="python-pptx openpyxl pandas PyYAML jpholiday Pillow playwright reportlab numpy matplotlib seaborn tabulate beautifulsoup4 lxml requests"
-IMPORTS="import pptx, openpyxl, pandas, yaml, jpholiday, PIL, playwright, reportlab, numpy, matplotlib, seaborn, tabulate, bs4, lxml, requests"
+PKGS="python-pptx python-docx openpyxl pandas PyYAML jpholiday Pillow playwright reportlab numpy matplotlib seaborn tabulate beautifulsoup4 lxml requests"
+IMPORTS="import pptx, docx, openpyxl, pandas, yaml, jpholiday, PIL, playwright, reportlab, numpy, matplotlib, seaborn, tabulate, bs4, lxml, requests"
 NODE_VER="v24.21.0"
 NODE_SHA_ARM64="bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057"
 NODE_SHA_X64="1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097"

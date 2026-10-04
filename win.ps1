@@ -30,8 +30,8 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::S
 
 $PyVer = '3.12.10'
 # $Pkgs を変えたら $Imports と Mac 版（maios_setup_mac.sh の PKGS・IMPORTS）も同じにする（tests/test_scripts_portable.py が照らす）
-$Pkgs = @('python-pptx', 'openpyxl', 'pandas', 'PyYAML', 'jpholiday', 'Pillow', 'playwright', 'reportlab', 'numpy', 'matplotlib', 'seaborn', 'tabulate', 'beautifulsoup4', 'lxml', 'requests')
-$Imports = 'import pptx, openpyxl, pandas, yaml, jpholiday, PIL, playwright, reportlab, numpy, matplotlib, seaborn, tabulate, bs4, lxml, requests'
+$Pkgs = @('python-pptx', 'python-docx', 'openpyxl', 'pandas', 'PyYAML', 'jpholiday', 'Pillow', 'playwright', 'reportlab', 'numpy', 'matplotlib', 'seaborn', 'tabulate', 'beautifulsoup4', 'lxml', 'requests')
+$Imports = 'import pptx, docx, openpyxl, pandas, yaml, jpholiday, PIL, playwright, reportlab, numpy, matplotlib, seaborn, tabulate, bs4, lxml, requests'
 $NodeVer = 'v24.21.0'
 $NodeSha = '158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541'
 $NodePkgs = @('pptxgenjs', 'playwright')
