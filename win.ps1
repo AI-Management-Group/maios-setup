@@ -344,6 +344,6 @@ if ($R_PY -eq '○' -and $R_PKG -eq '○' -and $R_NODE -eq '○' -and $R_DRIVE -
   $global:LASTEXITCODE = 0
 } else {
   if ($R_DRIVE -eq '×') { Write-Host ' Google ドライブ（パソコン版）が入っていません。事前案内の手順で入れてから、もう一度この1行を貼ってください。' }
-  Write-Host ' × があります。手を挙げて、この画面を AMG に見せてください。'
+  Write-Host ' × があります。もう一度同じ1行を貼って試してください。それでも残る時は、この画面の写真を撮って AMG へ Teams で送ってください。'
   $global:LASTEXITCODE = 1
 }
