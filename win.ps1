@@ -83,8 +83,11 @@ function Install-Parts([string]$Exe) {
   # 部品を入れて、全部が読み込めれば $true
   $o = & $Exe -m pip install --disable-pip-version-check --no-warn-script-location @Pkgs 2>&1
   $o | ForEach-Object { Log ([string]$_) }
-  & $Exe -c $Imports 2>$null | Out-Null
-  return ($LASTEXITCODE -eq 0)
+  # 読み込めない部品があれば、その理由（最後の数行）を記録に残す（AMG が記録だけで原因を引けるように）
+  $e = & $Exe -c $Imports 2>&1
+  $rc = $LASTEXITCODE
+  if ($rc -ne 0) { $e | Select-Object -Last 8 | ForEach-Object { Log ('import NG: ' + [string]$_) } }
+  return ($rc -eq 0)
 }
 
 function Repair-Pip([string]$Exe) {
@@ -176,8 +179,10 @@ function Install-NodeParts([string]$Exe, [string[]]$Names) {
   New-Item -ItemType Directory -Path $NodeParts -Force | Out-Null
   $o = & $npm install --prefix $NodeParts --no-audit --no-fund --loglevel=error @Names 2>&1
   $o | ForEach-Object { Log ([string]$_) }
-  & $Exe -e $NodeRequires 2>$null | Out-Null
-  return ($LASTEXITCODE -eq 0)
+  $e = & $Exe -e $NodeRequires 2>&1
+  $rc = $LASTEXITCODE
+  if ($rc -ne 0) { $e | Select-Object -Last 8 | ForEach-Object { Log ('require NG: ' + [string]$_) } }
+  return ($rc -eq 0)
 }
 
 $R_PY = '×'; $R_PKG = '×'; $R_NODE = '×'; $R_BROWSER = '△'; $R_APP = '－'; $R_DRIVE = '－'
