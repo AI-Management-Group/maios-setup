@@ -32,6 +32,18 @@ $PyVer = '3.12.10'
 # $Pkgs を変えたら $Imports と Mac 版（maios_setup_mac.sh の PKGS・IMPORTS）も同じにする（tests/test_scripts_portable.py が照らす）
 $Pkgs = @('python-pptx', 'python-docx', 'openpyxl', 'pandas', 'PyYAML', 'jpholiday', 'Pillow', 'playwright', 'reportlab', 'numpy', 'matplotlib', 'seaborn', 'tabulate', 'beautifulsoup4', 'lxml', 'requests')
 $Imports = 'import pptx, docx, openpyxl, pandas, yaml, jpholiday, PIL, playwright, reportlab, numpy, matplotlib, seaborn, tabulate, bs4, lxml, requests'
+$ImportMods = @(($Imports -replace '^import\s+', '') -split ',\s*')
+# 部品が入らなかった時に、どの部品がなぜ読み込めないかを1つずつ調べる。理由は UTF-8 のファイルに書かせて受け取る
+# （PowerShell が Python の出力を cp932 で読むと、Windows が返す日本語の理由が化けるため）
+$PartsCheckPy = @'
+import importlib, sys
+with open(sys.argv[1], 'w', encoding='utf-8') as f:
+    for m in sys.argv[2:]:
+        try:
+            importlib.import_module(m)
+        except BaseException as e:
+            f.write(m + ': ' + type(e).__name__ + ': ' + ' '.join(str(e).split()) + '\n')
+'@
 $NodeVer = 'v24.21.0'
 $NodeSha = '158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541'
 $NodePkgs = @('pptxgenjs', 'playwright')
@@ -88,6 +100,38 @@ function Install-Parts([string]$Exe) {
   $rc = $LASTEXITCODE
   if ($rc -ne 0) { $e | Select-Object -Last 8 | ForEach-Object { Log ('import NG: ' + [string]$_) } }
   return ($rc -eq 0)
+}
+
+function Get-PartsNG([string]$Exe) {
+  # 読み込めない部品を「部品: 理由」の行で返す（全部読み込めれば空）
+  $chk = Join-Path $env:TEMP 'maios_parts_check.py'
+  $out = Join-Path $env:TEMP 'maios_parts_check.txt'
+  $ng = @()
+  try {
+    [IO.File]::WriteAllText($chk, $PartsCheckPy, (New-Object Text.UTF8Encoding($false)))
+    Remove-Item $out -Force -ErrorAction SilentlyContinue
+    & $Exe $chk $out @ImportMods 2>&1 | Out-Null
+    if (Test-Path $out) { $ng = @([IO.File]::ReadAllLines($out, [Text.Encoding]::UTF8) | Where-Object { $_ }) }
+  } catch { Log ('parts check error: ' + $_) }
+  Remove-Item $chk, $out -Force -ErrorAction SilentlyContinue
+  return $ng
+}
+
+function Show-PartsNG([string[]]$Ng) {
+  # 入らなかった部品と理由を画面に出す（本人が次の手を選べ、写真だけで AMG が原因を引けるように）
+  if (-not $Ng -or $Ng.Count -eq 0) { return }
+  $names = @($Ng | ForEach-Object { ($_ -split ':')[0].Trim() })
+  Write-Host (' 入らなかった部品：{0}' -f ($names -join ', '))
+  $first = [string]$Ng[0]
+  if ($first.Length -gt 160) { $first = $first.Substring(0, 160) + '…' }
+  Write-Host ('   理由：{0}' -f $first)
+  if (@($Ng | Where-Object { $_ -like '*DLL load failed*' }).Count -gt 0) {
+    Write-Host ' Windows の保護機能（スマート アプリ コントロールやウイルス対策ソフト）が、入れたばかりの部品を止めていることがあります。'
+    Write-Host ' PC を再起動し、30分ほど置いてから、もう一度この1行を貼ってください。'
+  }
+  if (@($names | Where-Object { @('pptx', 'docx', 'openpyxl') -contains $_ }).Count -eq 0) {
+    Write-Host ' PowerPoint・Word・Excel を作る部品は入っています（動かないのは、上の部品を使うスキルだけです）。'
+  }
 }
 
 function Repair-Pip([string]$Exe) {
@@ -187,6 +231,7 @@ function Install-NodeParts([string]$Exe, [string[]]$Names) {
 
 $R_PY = '×'; $R_PKG = '×'; $R_NODE = '×'; $R_BROWSER = '△'; $R_APP = '－'; $R_DRIVE = '－'
 $OldNode = $false
+$PartsNG = @()
 Write-Host ''
 Write-Host 'MAIOS のセットアップを始めます（10分ほど）。終わるまで、この画面を閉じないでください。'
 Log ("start {0} {1} ps{2}" -f [Environment]::OSVersion.VersionString, $env:PROCESSOR_ARCHITECTURE, $PSVersionTable.PSVersion)
@@ -233,7 +278,11 @@ if ($py) {
     Repair-Pip $py
     $ok = Install-Parts $py
   }
-  if ($ok) { $R_PKG = '○'; Write-Host '  OK' } else { Write-Host '  一部が入りませんでした' }
+  if ($ok) { $R_PKG = '○'; Write-Host '  OK' } else {
+    Write-Host '  一部が入りませんでした'
+    $PartsNG = @(Get-PartsNG $py)
+    $PartsNG | ForEach-Object { Log ('parts NG: ' + $_) }
+  }
 } else { Write-Host '  Python が無いので飛ばしました' }
 # Python の文字コードを UTF-8 に揃える（この利用者だけ。次に開くアプリから効く）
 try {
@@ -348,7 +397,8 @@ if ($R_PY -eq '○' -and $R_PKG -eq '○' -and $R_NODE -eq '○' -and $R_DRIVE -
   if ($R_BROWSER -eq '△') { Write-Host ' 画面確認用のブラウザが入りませんでした。このままでも始められます。後でもう一度この1行を貼ると入ります。' }
   $global:LASTEXITCODE = 0
 } else {
-  if ($R_DRIVE -eq '×') { Write-Host ' Google ドライブ（パソコン版）が入っていません。事前案内の手順で入れてから、もう一度この1行を貼ってください。' }
-  Write-Host ' × があります。もう一度同じ1行を貼って試してください。それでも残る時は、この画面の写真を撮って AMG へ Teams で送ってください。'
+  if ($R_DRIVE -eq '×') { Write-Host ' Google ドライブ（パソコン版）が入っていません。ダウンロードしただけでは入りません。ダウンロードした物を開いて入れ、ログインまで済ませてから、もう一度この1行を貼ってください。' }
+  if ($R_PKG -eq '×') { Show-PartsNG $PartsNG }
+  Write-Host ' × があります。もう一度同じ1行を貼って試してください。それでも残る時は、この画面の写真を撮って Teams の導入相談部屋へ送ってください。'
   $global:LASTEXITCODE = 1
 }
