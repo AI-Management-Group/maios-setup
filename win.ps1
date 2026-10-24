@@ -13,9 +13,11 @@
 #      スキルのスクリプトが日本語を読み書きする時に化けたり落ちたりするため。Python が常に UTF-8 を使うようになる）
 #   3. Node.js（JavaScript のプログラムを動かすソフト）と、その部品2つ（pptxgenjs playwright）を入れる
 #      リッチなデックを組む経路と、ブラウザで表示を測るスクリプトが使う。Node.js 20 以上が既にあればそれを使い、
-#      無ければ %LOCALAPPDATA%\maios\node に入れて、この利用者の PATH に足す（公式の配布物を、チェックサムで中身を確かめてから展開する）。
+#      無ければ %LOCALAPPDATA%\maios\node に入れて、この利用者の PATH に足す（公式の配布物を、チェックサムで中身を確かめてから
+#      隣の場所に展開し、動くと確かめてから入れ替える。途中で失敗しても前の物は消えない）。
 #      部品は %LOCALAPPDATA%\maios\node_parts に入れる（既にある Node.js の中身には触れない）。
 #      どのフォルダに置いたスクリプトからも部品が見つかるよう、この利用者の環境変数 NODE_PATH にその場所を入れる
+#      %LOCALAPPDATA%\maios とその中の置き場が別の場所へのリンク（ジャンクションを含む）なら、Node.js の段は何も変えずに × にする
 #   4. 画面の確認に使うブラウザ（Playwright の Chromium）を入れる。普段使いの Chrome とは別物で、スクリプトだけが使う
 #   5. Claude アプリと Google ドライブ（パソコン版）があるかを確かめる。どちらもこのスクリプトでは入れない（事前案内で各自が入れる）
 #      Google ドライブは必須＝無ければ ×。Claude アプリはこの1行を走らせている間に入れてもよいので、無くても △ にとどめる
@@ -59,6 +61,15 @@ $Log = Join-Path $env:LOCALAPPDATA 'maios_setup.log'
 
 function Log([string]$m) { try { Add-Content -Path $Log -Value ("{0} {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m) -Encoding UTF8 } catch {} }
 function Step([string]$m) { Write-Host ''; Write-Host ('▶ ' + $m); Log ('== ' + $m) }
+# 管理する置き場の境界。%LOCALAPPDATA%・%LOCALAPPDATA%\maios・中の node・node_parts・作業用の場所のどれかが、
+# 別の場所へのリンク（ジャンクションを含む）なら、その場所を返す。あれば Node.js の段は何も変えない（リンクの先を実行・作成・削除しない）
+function Get-BoundaryProblem {
+  foreach ($p in @($env:LOCALAPPDATA, $MaiosDir, $NodeHome, "$NodeHome.old", "$NodeHome.new", "$NodeHome.unzip", $NodeParts, $NodeModules)) {
+    $i = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+    if ($i -and (($i.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $i.LinkTarget)) { return $p }
+  }
+  return $null
+}
 
 function Test-Python([string]$Exe, [string[]]$Pre) {
   # 3.9 以上で動けば実行ファイルの場所を返す（Microsoft Store の身代わり python.exe は弾く）
@@ -172,34 +183,78 @@ function Find-Node {
   return $null
 }
 
+function Restore-Node {
+  # 前の回が入れ替えの途中（前の物を node.old へ退避した直後）で止まり、現行の場所が空のままなら、退避を戻して前の状態にする
+  # （古くて動かない物でも戻す。新しい物は、この後で展開して動くと確かめた時だけ入れ替わる）
+  $old = "$NodeHome.old"
+  if (Get-BoundaryProblem) { return }
+  if ((Test-Path $NodeHome) -or -not (Test-Path $old)) { return }
+  try {
+    Rename-Item -Path $old -NewName (Split-Path $NodeHome -Leaf) -ErrorAction Stop
+    Log ("node: 途中で止まった回の退避を戻した 現行={0}" -f (Test-Node (Join-Path $NodeHome 'node.exe')))
+  } catch { Log ("node: 退避を戻せなかった: {0}" -f $_) }
+}
+
 function Install-Node {
-  # 公式の zip を取り、チェックサムで中身を確かめてから %LOCALAPPDATA%\maios\node に展開する
+  # 公式の zip を取り、チェックサムで中身を確かめてから隣の場所（node.new）に展開し、動くと確かめてから
+  # %LOCALAPPDATA%\maios\node と入れ替える（展開の途中で失敗しても、前の Node.js は消えない）
   $name = "node-$NodeVer-win-x64"
   $url = "https://nodejs.org/dist/$NodeVer/$name.zip"
   $zip = Join-Path $env:TEMP "$name.zip"
+  $new = "$NodeHome.new"
+  $old = "$NodeHome.old"
+  $stage = "$NodeHome.unzip"
+  $bad = Get-BoundaryProblem
+  if ($bad) { Log "node: 境界の外を指している $bad → 入れない"; return }
+  Restore-Node
   try {
     (New-Object Net.WebClient).DownloadFile($url, $zip)
     Log "downloaded $url"
     $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower()
     if ($hash -ne $NodeSha) { Log "node: checksum mismatch $hash"; return }
-    if (Test-Path $NodeHome) { Remove-Item $NodeHome -Recurse -Force }
-    New-Item -ItemType Directory -Path $NodeHome -Force | Out-Null
-    $done = $false
+    if (Test-Path $new) { Remove-Item $new -Recurse -Force }
+    New-Item -ItemType Directory -Path $new -Force | Out-Null
     $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
     if (Test-Path $tar) {
       # Windows 付属の tar は zip も展開できる（Expand-Archive より速い）
-      $o = & $tar -xf $zip -C $NodeHome --strip-components 1 2>&1
+      $o = & $tar -xf $zip -C $new --strip-components 1 2>&1
       $o | ForEach-Object { Log ([string]$_) }
-      $done = Test-Path (Join-Path $NodeHome 'node.exe')
     }
-    if (-not $done) {
+    if (-not (Test-Path (Join-Path $new 'node.exe'))) {
       Log 'node: expand with Expand-Archive'
-      Remove-Item $NodeHome -Recurse -Force
-      Expand-Archive -Path $zip -DestinationPath $MaiosDir -Force
-      Rename-Item -Path (Join-Path $MaiosDir $name) -NewName 'node'
+      if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+      Remove-Item $new -Recurse -Force -ErrorAction SilentlyContinue
+      Expand-Archive -Path $zip -DestinationPath $stage -Force
+      Move-Item -Path (Join-Path $stage $name) -Destination $new
+      Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
     }
+    if (-not (Test-Node (Join-Path $new 'node.exe'))) { Log 'node: 展開した物が動かないので入れ替えない'; return }
+    if (Test-Path $old) { Remove-Item $old -Recurse -Force -ErrorAction Stop }
+    # 入れ替えは2回の名前の変更。どちらも失敗を例外にして（-ErrorAction Stop）、動く新しい物が現行の場所に入ったと確かめるまで前の物を消さない
+    $hadOld = Test-Path $NodeHome
+    $swapped = $false
+    try {
+      if ($hadOld) {
+        Rename-Item -Path $NodeHome -NewName (Split-Path $old -Leaf) -ErrorAction Stop
+        if ((Test-Path $NodeHome) -or -not (Test-Path $old)) { throw '前の Node.js を退避できなかった' }
+      }
+      Rename-Item -Path $new -NewName (Split-Path $NodeHome -Leaf) -ErrorAction Stop
+      if (-not (Test-Node (Join-Path $NodeHome 'node.exe'))) { throw '入れ替えた後の Node.js が動かない' }
+      $swapped = $true
+    } catch {
+      Log ("node: 入れ替えられなかったので前の物に戻す: {0}" -f $_)
+      if ($hadOld -and (Test-Path $old)) {
+        if (Test-Path $NodeHome) { Remove-Item $NodeHome -Recurse -Force -ErrorAction SilentlyContinue }
+        if (-not (Test-Path $NodeHome)) { Rename-Item -Path $old -NewName (Split-Path $NodeHome -Leaf) -ErrorAction SilentlyContinue }
+      }
+      Log ("node: 戻した後 現行={0} 退避={1}" -f (Test-Path (Join-Path $NodeHome 'node.exe')), (Test-Path $old))
+    }
+    if ($swapped -and (Test-Path $old)) { Remove-Item $old -Recurse -Force -ErrorAction SilentlyContinue }
   } catch { Log ("node install error: {0}" -f $_) }
-  Remove-Item $zip -Force -ErrorAction SilentlyContinue
+  finally {
+    Remove-Item $zip -Force -ErrorAction SilentlyContinue
+    foreach ($d in @($new, $stage)) { if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue } }
+  }
 }
 
 function Add-UserPath([string]$Dir) {
@@ -220,6 +275,8 @@ function Add-UserPath([string]$Dir) {
 function Install-NodeParts([string]$Exe, [string[]]$Names) {
   # 部品を入れて、全部が読み込めれば $true
   $npm = Join-Path (Split-Path $Exe) 'npm.cmd'
+  $bad = Get-BoundaryProblem
+  if ($bad) { Log "node_parts: 境界の外を指している $bad → 入れない"; return $false }
   New-Item -ItemType Directory -Path $NodeParts -Force | Out-Null
   $o = & $npm install --prefix $NodeParts --no-audit --no-fund --loglevel=error @Names 2>&1
   $o | ForEach-Object { Log ([string]$_) }
@@ -293,11 +350,21 @@ try {
 
 # 3. Node.js と部品2つ
 Step '3/5 Node.js と部品（2つ）'
-$node = Find-Node
-if (-not $node) {
-  Write-Host '  ダウンロードしています…'
-  Install-Node
+$node = $null
+$Boundary = Get-BoundaryProblem
+if ($Boundary) {
+  Log "境界の外を指している: $Boundary → Node.js の段は何も変えない"
+  Write-Host '  次の場所が別の場所へのリンクになっているため、Node.js は何も変えずに止めました：'
+  Write-Host ('    ' + $Boundary)
+  Write-Host '  この画面の写真を撮って、Teams の MAIOS導入相談部屋へ送ってください'
+} else {
+  Restore-Node
   $node = Find-Node
+  if (-not $node) {
+    Write-Host '  ダウンロードしています…'
+    Install-Node
+    $node = Find-Node
+  }
 }
 if ($node) {
   $nodeDir = Split-Path $node
@@ -336,7 +403,7 @@ if ($node) {
     Write-Host ("  OK（{0}）" -f $v)
     Log "node $node"
   } else { Write-Host '  部品が入りませんでした' }
-} else { Write-Host '  入れられませんでした（ネットワークを確認してください）' }
+} elseif (-not $Boundary) { Write-Host '  入れられませんでした（ネットワークを確認してください）' }
 
 # 4. 画面の確認に使うブラウザ（Playwright の Chromium）。無くても Chrome で代わりが利くスキルが多いので、入らなくても △ にとどめる
 Step '4/5 画面の確認に使うブラウザ'
